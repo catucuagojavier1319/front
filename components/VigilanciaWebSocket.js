@@ -5,6 +5,7 @@ import {
   ActivityIndicator, Alert, StatusBar,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { API_BASE_URL } from '../config';
 
 export default function VigilanciaWebSocket({ onClose }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -31,13 +32,13 @@ export default function VigilanciaWebSocket({ onClose }) {
   }, []);
 
   const connectWebSocket = () => {
-    const wsUrl = 'ws://192.168.10.159:8000/api/detection/ws/' + sessionIdRef.current;
+    const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/api/detection/ws/${sessionIdRef.current}`;
     console.log('🔌 Conectando WebSocket:', wsUrl);
     
     wsRef.current = new WebSocket(wsUrl);
     
     wsRef.current.onopen = () => {
-      console.log('✅ WebSocket conectado');
+      console.log(' WebSocket conectado');
       setIsConnected(true);
     };
     
@@ -49,16 +50,6 @@ export default function VigilanciaWebSocket({ onClose }) {
         state: result.state || '—'
       });
       
-      if (result.detected) {
-        Alert.alert(
-          '🚨 ALERTA DE SEGURIDAD',
-          `${result.message}\nDistancia: ${result.distance}px\nConfianza: ${Math.round((result.confidence || 0) * 100)}%`,
-          [
-            { text: 'Ver historial', onPress: onClose },
-            { text: 'Continuar', style: 'cancel' },
-          ]
-        );
-      }
     };
     
     wsRef.current.onerror = (error) => {
@@ -96,7 +87,7 @@ export default function VigilanciaWebSocket({ onClose }) {
       try {
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.6, // Calidad más baja para mayor velocidad
+          quality: 0.8, 
         });
         
         // Calcular FPS
@@ -163,9 +154,15 @@ export default function VigilanciaWebSocket({ onClose }) {
         </View>
         
         <View style={styles.statsBar}>
-          <Text style={styles.statsText}>🎯 Confianza: {Math.round(stats.confidence * 100)}%</Text>
-          <Text style={styles.statsText}>📏 Distancia: {stats.distance}px</Text>
-          <Text style={styles.statsText}>📊 Estado: {stats.state}</Text>
+          {stats.confidence > 0 ? (
+            <>
+              <Text style={styles.statsText}> Confianza: {Math.round(stats.confidence * 100)}%</Text>
+              <Text style={styles.statsText}> Distancia: {stats.distance}px</Text>
+              <Text style={styles.statsText}> Estado: {stats.state}</Text>
+            </>
+          ) : (
+            <Text style={styles.statsText}> Esperando detección...</Text>
+          )}
         </View>
         
         <View style={styles.buttonContainer}>

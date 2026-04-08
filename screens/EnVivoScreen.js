@@ -1,12 +1,11 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+// screens/EnVivoScreen.js
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import VigilanciaWebSocket from '../components/VigilanciaWebSocket';
 
-export default function EnVivoScreen({ navigation }) {
+export default function EnVivoScreen() {
+  const [modalVisible, setModalVisible] = useState(false);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}> Vigilancia Activa</Text>
@@ -17,11 +16,20 @@ export default function EnVivoScreen({ navigation }) {
       
       <TouchableOpacity
         style={styles.startButton}
-        onPress={() => navigation.navigate('Vigilancia')}
+        onPress={() => setModalVisible(true)}  
       >
-        <Text style={styles.startButtonText}> Iniciar Vigilancia</Text>
+        <Text style={styles.startButtonText}>▶ INICIAR VIGILANCIA</Text>
       </TouchableOpacity>
-      
+
+      {/* Modal con la cámara */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setModalVisible(false)}  // Cierra con back button
+      >
+        <VigilanciaWebSocket onClose={() => setModalVisible(false)} />  //
+      </Modal>
     </View>
   );
 }
