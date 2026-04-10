@@ -1,6 +1,7 @@
 // context/AlertContext.js
 import React, { createContext, useState } from 'react';
 import { API_BASE_URL } from '../config';
+ 
 
 export const AlertContext = createContext();
 
@@ -17,55 +18,32 @@ export const AlertProvider = ({ children }) => {
     setVideos((prev) => prev.filter((v) => v.id !== id));
   };
 
-  // 📥 Función para cargar alertas del backend
-  const refreshFromBackend = async () => {
-    try {
-      setLoadingBackend(true);
-      console.log('🔄 Cargando alertas desde:', `${API_BASE_URL}/api/incidents`);
-      
-      const response = await fetch(`${API_BASE_URL}/api/incidents/`);
-      const alertasList = await response.json();
-      
-      console.log('📋 Alertas recibidas:', alertasList.length);
-      
-      // Convertir al formato que espera HistorialScreen
-      const formattedAlerts = await Promise.all(
-        alertasList.map(async (alerta) => {
-          try {
-            const imgResponse = await fetch(`${API_BASE_URL}/api/incidents/${alerta.id}/imagenes`);
-            const imgData = await imgResponse.json();
-            
-            return {
-              id: alerta.id.toString(),
-              imagen: `data:image/jpeg;base64,${imgData.foto1_base64}`,
-              distancia: alerta.distancia,
-              confianza: alerta.moto_confianza,
-              mensaje: `🚨 Estado: ${alerta.estado} | 📨 Telegram: ${alerta.telegram_enviado ? 'Enviado' : 'Pendiente'}`,
-              fecha: alerta.fecha,
-            };
-          } catch (error) {
-            // Si no hay imagen, devolver sin imagen
-            return {
-              id: alerta.id.toString(),
-              imagen: null,
-              distancia: alerta.distancia,
-              confianza: alerta.moto_confianza,
-              mensaje: `🚨 Estado: ${alerta.estado} | 📨 Telegram: ${alerta.telegram_enviado ? 'Enviado' : 'Pendiente'}`,
-              fecha: alerta.fecha,
-            };
-          }
-        })
-      );
-      
-      setAlerts(formattedAlerts);
-      console.log('✅ Alertas cargadas:', formattedAlerts.length);
-      
-    } catch (error) {
-      console.error('❌ Error cargando alertas:', error);
-    } finally {
-      setLoadingBackend(false);
-    }
-  };
+  // Función para cargar alertas del backend
+// context/AlertContext.js
+const refreshFromBackend = async () => {
+  try {
+    setLoadingBackend(true);
+    const response = await fetch(`${API_BASE_URL}/api/incidents/`);
+    const alertasList = await response.json();
+    
+    // ✅ Ahora las URLs vienen directamente del backend
+    const formattedAlerts = alertasList.map((alerta) => ({
+      id: alerta.id.toString(),
+      imagen: alerta.foto1_url,  // 👈 URL directa de S3 (no base64)
+      distancia: alerta.distancia,
+      confianza: alerta.moto_confianza,
+      mensaje: `🚨 Estado: ${alerta.estado} | 📨 Telegram: ${alerta.telegram_enviado ? 'Enviado' : 'Pendiente'}`,
+      fecha: alerta.fecha,
+    }));
+    
+    setAlerts(formattedAlerts);
+    
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    setLoadingBackend(false);
+  }
+};
 
   const addAlert = (videoUri) => {
     const newAlert = {

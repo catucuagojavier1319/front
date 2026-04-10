@@ -8,7 +8,7 @@ export default function EnVivoScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}> Vigilancia Activa</Text>
+      <Text style={styles.title}>Vigilancia Activa</Text>
       
       <Text style={styles.description}>
         Al iniciar la vigilancia, la cámara se activará y funcionará como un sistema de vigilancia en tiempo real.

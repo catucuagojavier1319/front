@@ -18,7 +18,7 @@ export default function HistorialScreen() {
     refreshFromBackend();
   }, []);
 
-  // Mostrar pantalla de carga mientras se obtienen los datos
+
   if (loadingBackend && alerts.length === 0) {
     return (
       <View style={styles.centerContainer}>
