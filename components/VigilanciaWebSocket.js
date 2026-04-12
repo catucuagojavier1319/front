@@ -21,35 +21,51 @@ export default function VigilanciaWebSocket({ onClose }) {
   const frameCountRef = useRef(0);
   const lastTimeRef = useRef(Date.now());
   const animationRef = useRef(null);
+  const isClosingRef = useRef(false);
 
   // Conectar WebSocket
   useEffect(() => {
     connectWebSocket();
     return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      isClosingRef.current = true;
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
     };
   }, []);
 
   const connectWebSocket = () => {
+    if (isClosingRef.current) return;
+    
     const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/api/detection/ws/${sessionIdRef.current}`;
     console.log('🔌 Conectando WebSocket:', wsUrl);
     
     wsRef.current = new WebSocket(wsUrl);
     
     wsRef.current.onopen = () => {
-      console.log(' WebSocket conectado');
-      setIsConnected(true);
+      if (!isClosingRef.current) {
+        console.log('✅ WebSocket conectado');
+        setIsConnected(true);
+      }
     };
     
     wsRef.current.onmessage = (event) => {
-      const result = JSON.parse(event.data);
-      setStats({
-        confidence: result.confidence || 0,
-        distance: result.distance || 0,
-        state: result.state || '—'
-      });
-      
+      if (isClosingRef.current) return;
+      try {
+        const result = JSON.parse(event.data);
+        setStats({
+          confidence: result.confidence || 0,
+          distance: result.distance || 0,
+          state: result.state || '—'
+        });
+      } catch (e) {
+        console.error('Error parsing message:', e);
+      }
     };
     
     wsRef.current.onerror = (error) => {
@@ -60,14 +76,15 @@ export default function VigilanciaWebSocket({ onClose }) {
     wsRef.current.onclose = () => {
       console.log('🔌 WebSocket desconectado');
       setIsConnected(false);
-      // Intentar reconectar después de 3 segundos
-      setTimeout(connectWebSocket, 3000);
+      if (!isClosingRef.current && isActive) {
+        setTimeout(connectWebSocket, 3000);
+      }
     };
   };
 
   // Enviar frames continuamente
   useEffect(() => {
-    if (isActive && isConnected && permission?.granted) {
+    if (isActive && isConnected && permission?.granted && !isClosingRef.current) {
       startSendingFrames();
     } else {
       stopSendingFrames();
@@ -79,34 +96,52 @@ export default function VigilanciaWebSocket({ onClose }) {
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     
     const sendFrame = async () => {
-      if (!cameraRef.current || wsRef.current?.readyState !== WebSocket.OPEN) {
+      // Validaciones estrictas
+      if (isClosingRef.current) return;
+      if (!cameraRef.current) {
+        animationRef.current = requestAnimationFrame(sendFrame);
+        return;
+      }
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        animationRef.current = requestAnimationFrame(sendFrame);
+        return;
+      }
+      if (isProcessing) {
         animationRef.current = requestAnimationFrame(sendFrame);
         return;
       }
       
       try {
+        setIsProcessing(true);
+        
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.8, 
+          quality: 0.6,
         });
         
-        // Calcular FPS
-        const now = Date.now();
-        if (now - lastTimeRef.current >= 1000) {
-          setFps(frameCountRef.current);
-          frameCountRef.current = 0;
-          lastTimeRef.current = now;
+        // Verificar nuevamente antes de enviar
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isClosingRef.current) {
+          wsRef.current.send(JSON.stringify({ frame: photo.base64 }));
+          
+          // Calcular FPS
+          const now = Date.now();
+          if (now - lastTimeRef.current >= 1000) {
+            setFps(frameCountRef.current);
+            frameCountRef.current = 0;
+            lastTimeRef.current = now;
+          }
+          frameCountRef.current++;
         }
-        frameCountRef.current++;
-        
-        // Enviar por WebSocket
-        wsRef.current.send(JSON.stringify({ frame: photo.base64 }));
         
       } catch (error) {
         console.error('Error capturando frame:', error);
+      } finally {
+        setIsProcessing(false);
       }
       
-      animationRef.current = requestAnimationFrame(sendFrame);
+      if (!isClosingRef.current) {
+        animationRef.current = requestAnimationFrame(sendFrame);
+      }
     };
     
     animationRef.current = requestAnimationFrame(sendFrame);
@@ -117,6 +152,17 @@ export default function VigilanciaWebSocket({ onClose }) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
+  };
+
+  const handleClose = () => {
+    isClosingRef.current = true;
+    setIsActive(false);
+    stopSendingFrames();
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    onClose();
   };
 
   // Permisos
@@ -131,7 +177,7 @@ export default function VigilanciaWebSocket({ onClose }) {
         <TouchableOpacity style={styles.btn} onPress={requestPermission}>
           <Text style={styles.btnTxt}>Conceder permiso</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.red]} onPress={onClose}>
+        <TouchableOpacity style={[styles.btn, styles.red]} onPress={handleClose}>
           <Text style={styles.btnTxt}>Cancelar</Text>
         </TouchableOpacity>
       </View>
@@ -156,12 +202,12 @@ export default function VigilanciaWebSocket({ onClose }) {
         <View style={styles.statsBar}>
           {stats.confidence > 0 ? (
             <>
-              <Text style={styles.statsText}> Confianza: {Math.round(stats.confidence * 100)}%</Text>
-              <Text style={styles.statsText}> Distancia: {stats.distance}px</Text>
-              <Text style={styles.statsText}> Estado: {stats.state}</Text>
+              <Text style={styles.statsText}>🎯 Confianza: {Math.round(stats.confidence * 100)}%</Text>
+              <Text style={styles.statsText}>📏 Distancia: {stats.distance}px</Text>
+              <Text style={styles.statsText}>📊 Estado: {stats.state}</Text>
             </>
           ) : (
-            <Text style={styles.statsText}> Esperando detección...</Text>
+            <Text style={styles.statsText}>🔍 Esperando detección...</Text>
           )}
         </View>
         
@@ -172,7 +218,7 @@ export default function VigilanciaWebSocket({ onClose }) {
           >
             <Text style={styles.btnTxt}>{isActive ? '⏹ DETENER' : '▶ INICIAR'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, styles.red]} onPress={onClose}>
+          <TouchableOpacity style={[styles.btn, styles.red]} onPress={handleClose}>
             <Text style={styles.btnTxt}>✕ CERRAR</Text>
           </TouchableOpacity>
         </View>
@@ -183,7 +229,7 @@ export default function VigilanciaWebSocket({ onClose }) {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  info: { color: '#fff', fontSize: 18, marginBottom: 20 },
+  info: { color: '#fff', fontSize: 18, marginBottom: 20, textAlign: 'center' },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'space-between', paddingTop: 50, paddingBottom: 40 },
   statusBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 30, alignSelf: 'center', gap: 10 },
   dot: { width: 10, height: 10, borderRadius: 5 },

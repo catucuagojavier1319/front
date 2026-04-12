@@ -26,18 +26,19 @@ const refreshFromBackend = async () => {
     const response = await fetch(`${API_BASE_URL}/api/incidents/`);
     const alertasList = await response.json();
     
-    // ✅ Ahora las URLs vienen directamente del backend
     const formattedAlerts = alertasList.map((alerta) => ({
       id: alerta.id.toString(),
-      imagen: alerta.foto1_url,  // 👈 URL directa de S3 (no base64)
+      imagen: alerta.foto1_url,
       distancia: alerta.distancia,
       confianza: alerta.moto_confianza,
-      mensaje: `🚨 Estado: ${alerta.estado} | 📨 Telegram: ${alerta.telegram_enviado ? 'Enviado' : 'Pendiente'}`,
       fecha: alerta.fecha,
+      tipo_evento: alerta.tipo_evento || "normal",
+      arma_utilizada: alerta.arma_utilizada || "ninguna",
+      testigos: alerta.testigos || 0,
+      descripcion: alerta.descripcion || ""
     }));
     
     setAlerts(formattedAlerts);
-    
   } catch (error) {
     console.error('Error:', error);
   } finally {
